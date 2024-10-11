@@ -1363,7 +1363,7 @@ Readability.prototype = {
         parentOfTopCandidate = topCandidate.parentNode;
         var lastScore = topCandidate.readability.contentScore;
         // The scores shouldn't get too low.
-        var scoreThreshold = lastScore / 2;
+        var scoreThreshold = lastScore / 3;
         while (parentOfTopCandidate.tagName !== "BODY") {
           if (!parentOfTopCandidate.readability) {
             parentOfTopCandidate = parentOfTopCandidate.parentNode;
@@ -2394,7 +2394,8 @@ Readability.prototype = {
       ) {
         return true;
       }
-    })
+      return false;
+    });
   },
 
   /**
