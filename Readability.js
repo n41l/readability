@@ -104,7 +104,7 @@ function Readability(doc, options) {
       }
     };
   } else {
-    this.log = function () {};
+    this.log = function () { };
   }
 }
 
@@ -144,7 +144,7 @@ Readability.prototype = {
     positive:
       /article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story/i,
     negative:
-      /-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|footer|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|widget/i,
+      /-ad-|^hidden$| hidden$| hidden |^hidden |^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|footer|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|widget/i,
     extraneous:
       /print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility/i,
     byline: /byline|author|dateline|writtenby|p-author/i,
@@ -630,7 +630,7 @@ Readability.prototype = {
       curTitleWordCount <= 4 &&
       (!titleHadHierarchicalSeparators ||
         curTitleWordCount !=
-          wordCount(origTitle.replace(/[\|\-\\\/>»]+/g, "")) - 1)
+        wordCount(origTitle.replace(/[\|\-\\\/>»]+/g, "")) - 1)
     ) {
       curTitle = origTitle;
     }
@@ -812,18 +812,19 @@ Readability.prototype = {
       });
     });
 
-    this._clean(articleContent, "iframe");
-    this._clean(articleContent, "input");
-    this._clean(articleContent, "textarea");
-    this._clean(articleContent, "select");
-    this._clean(articleContent, "button");
+    // this._clean(articleContent, "iframe");
+    // this._clean(articleContent, "input");
+    // this._clean(articleContent, "textarea");
+    // this._clean(articleContent, "select");
+    // this._clean(articleContent, "button");
+    this._cleanAds(articleContent);
     this._cleanHeaders(articleContent);
 
     // Do these last as the previous stuff may have removed junk
     // that will affect these
     this._cleanConditionally(articleContent, "table");
     this._cleanConditionally(articleContent, "ul");
-    this._cleanConditionally(articleContent, "div");
+    // this._cleanConditionally(articleContent, "div");
 
     // replace H1 with H2 as H1 should be only title that is displayed separately
     this._replaceNodeTags(
@@ -891,7 +892,7 @@ Readability.prototype = {
    * @return void
    **/
   _initializeNode(node) {
-    node.readability = { contentScore: 0 };
+    node.readability = { contentScore: 0, refCount: 0 };
 
     switch (node.tagName) {
       case "DIV":
@@ -1114,9 +1115,9 @@ Readability.prototype = {
           if (this.UNLIKELY_ROLES.includes(node.getAttribute("role"))) {
             this.log(
               "Removing content with role " +
-                node.getAttribute("role") +
-                " - " +
-                matchString
+              node.getAttribute("role") +
+              " - " +
+              matchString
             );
             node = this._removeAndGetNext(node);
             continue;
@@ -1252,6 +1253,7 @@ Readability.prototype = {
           } else {
             scoreDivider = level * 3;
           }
+          ancestor.readability.refCount += 1;
           ancestor.readability.contentScore += contentScore / scoreDivider;
         });
       });
@@ -1267,7 +1269,7 @@ Readability.prototype = {
         // unaffected by this operation.
         var candidateScore =
           candidate.readability.contentScore *
-          (1 - this._getLinkDensity(candidate));
+          (1 - this._getLinkDensity(candidate)) * candidate.readability.refCount;
         candidate.readability.contentScore = candidateScore;
 
         this.log("Candidate:", candidate, "with score " + candidateScore);
@@ -1315,7 +1317,7 @@ Readability.prototype = {
         for (var i = 1; i < topCandidates.length; i++) {
           if (
             topCandidates[i].readability.contentScore /
-              topCandidate.readability.contentScore >=
+            topCandidate.readability.contentScore >=
             0.75
           ) {
             alternativeCandidateAncestors.push(
@@ -1361,7 +1363,7 @@ Readability.prototype = {
         parentOfTopCandidate = topCandidate.parentNode;
         var lastScore = topCandidate.readability.contentScore;
         // The scores shouldn't get too low.
-        var scoreThreshold = lastScore / 3;
+        var scoreThreshold = lastScore / 2;
         while (parentOfTopCandidate.tagName !== "BODY") {
           if (!parentOfTopCandidate.readability) {
             parentOfTopCandidate = parentOfTopCandidate.parentNode;
@@ -1443,7 +1445,7 @@ Readability.prototype = {
           if (
             sibling.readability &&
             sibling.readability.contentScore + contentBonus >=
-              siblingScoreThreshold
+            siblingScoreThreshold
           ) {
             append = true;
           } else if (sibling.nodeName === "P") {
@@ -1963,8 +1965,8 @@ Readability.prototype = {
       !node.textContent.trim().length &&
       (!node.children.length ||
         node.children.length ==
-          node.getElementsByTagName("br").length +
-            node.getElementsByTagName("hr").length)
+        node.getElementsByTagName("br").length +
+        node.getElementsByTagName("hr").length)
     );
   },
 
@@ -2381,6 +2383,18 @@ Readability.prototype = {
       child => (childrenLength += this._getInnerText(child, true).length)
     );
     return childrenLength / textLength;
+  },
+
+  _cleanAds(e) {
+    this._removeNodes(this._getAllNodesWithTag(e, ["div"]), function (node) {
+      var innerText = this._getInnerText(node);
+      if (
+        this.REGEXPS.adWords.test(innerText) ||
+        this.REGEXPS.loadingWords.test(innerText)
+      ) {
+        return true;
+      }
+    })
   },
 
   /**
