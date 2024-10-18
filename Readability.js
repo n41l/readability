@@ -282,7 +282,7 @@ Readability.prototype = {
     // Readability cannot open relative uris so we convert them to absolute uris.
     this._fixRelativeUris(articleContent);
 
-    this._simplifyNestedElements(articleContent);
+    // this._simplifyNestedElements(articleContent);
 
     if (!this._keepClasses) {
       // Remove classes.
@@ -737,6 +737,19 @@ Readability.prototype = {
     });
   },
 
+  // The nodes may have some custom properties, we need to copy them
+  _copyCustomProperties(source, target) {
+    const standardProperties = new Set(Object.getOwnPropertyNames(target));
+
+    Object.getOwnPropertyNames(source).forEach(function (prop) {
+      if (!standardProperties.has(prop)) {
+        target[prop] = source[prop];
+      }
+    });
+
+    return target;
+  },
+
   _setNodeTag(node, tag) {
     this.log("_setNodeTag", node, tag);
     if (this._docJSDOMParser) {
@@ -753,6 +766,7 @@ Readability.prototype = {
     if (node.readability) {
       replacement.readability = node.readability;
     }
+    this._copyCustomProperties(node, replacement);
 
     for (var i = 0; i < node.attributes.length; i++) {
       try {
@@ -794,6 +808,7 @@ Readability.prototype = {
     this._cleanConditionally(articleContent, "fieldset");
     this._clean(articleContent, "object");
     this._clean(articleContent, "embed");
+    this._clean(articleContent, "header");
     this._clean(articleContent, "footer");
     this._clean(articleContent, "link");
     this._clean(articleContent, "aside");
@@ -817,6 +832,8 @@ Readability.prototype = {
     // this._clean(articleContent, "textarea");
     // this._clean(articleContent, "select");
     // this._clean(articleContent, "button");
+    this._cleanComments(articleContent);
+    this._cleanContainerContents(articleContent);
     this._cleanAds(articleContent);
     this._cleanHeaders(articleContent);
 
@@ -827,10 +844,10 @@ Readability.prototype = {
     // this._cleanConditionally(articleContent, "div");
 
     // replace H1 with H2 as H1 should be only title that is displayed separately
-    this._replaceNodeTags(
-      this._getAllNodesWithTag(articleContent, ["h1"]),
-      "h2"
-    );
+    // this._replaceNodeTags(
+    //   this._getAllNodesWithTag(articleContent, ["h1"]),
+    //   "h2"
+    // );
 
     // Remove extra paragraphs
     this._removeNodes(
@@ -844,8 +861,13 @@ Readability.prototype = {
           "object",
           "iframe",
         ]).length;
+        // info: for some html files, the empty paragraphs are used as separators, so we only remove empty paragraphs
+        // this._getInnerText method will trim the text
+        // return (
+        //   contentElementCount === 0 && !this._getInnerText(paragraph, false)
+        // );
         return (
-          contentElementCount === 0 && !this._getInnerText(paragraph, false)
+          contentElementCount === 0 && paragraph.textContent === ""
         );
       }
     );
@@ -1086,7 +1108,8 @@ Readability.prototype = {
           continue;
         }
 
-        if (shouldRemoveTitleHeader && this._headerDuplicatesTitle(node)) {
+        // Only removing the header if it's a H1
+        if (shouldRemoveTitleHeader && this._headerDuplicatesTitle(node) && node.tagName === "H1") {
           this.log(
             "Removing header: ",
             node.textContent.trim(),
@@ -1126,8 +1149,8 @@ Readability.prototype = {
 
         // Remove DIV, SECTION, and HEADER nodes without any content(e.g. text, image, video, or iframe).
         if (
-          (node.tagName === "DIV" ||
-            node.tagName === "SECTION" ||
+          // (node.tagName === "DIV" ||
+          (node.tagName === "SECTION" ||
             node.tagName === "HEADER" ||
             node.tagName === "H1" ||
             node.tagName === "H2" ||
@@ -1146,46 +1169,46 @@ Readability.prototype = {
         }
 
         // Turn all divs that don't have children block level elements into p's
-        if (node.tagName === "DIV") {
-          // Put phrasing content into paragraphs.
-          var p = null;
-          var childNode = node.firstChild;
-          while (childNode) {
-            var nextSibling = childNode.nextSibling;
-            if (this._isPhrasingContent(childNode)) {
-              if (p !== null) {
-                p.appendChild(childNode);
-              } else if (!this._isWhitespace(childNode)) {
-                p = doc.createElement("p");
-                node.replaceChild(p, childNode);
-                p.appendChild(childNode);
-              }
-            } else if (p !== null) {
-              while (p.lastChild && this._isWhitespace(p.lastChild)) {
-                p.lastChild.remove();
-              }
-              p = null;
-            }
-            childNode = nextSibling;
-          }
+        // if (node.tagName === "DIV") {
+        //   // Put phrasing content into paragraphs.
+        //   var p = null;
+        //   var childNode = node.firstChild;
+        //   while (childNode) {
+        //     var nextSibling = childNode.nextSibling;
+        //     if (this._isPhrasingContent(childNode)) {
+        //       if (p !== null) {
+        //         p.appendChild(childNode);
+        //       } else if (!this._isWhitespace(childNode)) {
+        //         p = doc.createElement("p");
+        //         node.replaceChild(p, childNode);
+        //         p.appendChild(childNode);
+        //       }
+        //     } else if (p !== null) {
+        //       while (p.lastChild && this._isWhitespace(p.lastChild)) {
+        //         p.lastChild.remove();
+        //       }
+        //       p = null;
+        //     }
+        //     childNode = nextSibling;
+        //   }
 
-          // Sites like http://mobile.slate.com encloses each paragraph with a DIV
-          // element. DIVs with only a P element inside and no text content can be
-          // safely converted into plain P elements to avoid confusing the scoring
-          // algorithm with DIVs with are, in practice, paragraphs.
-          if (
-            this._hasSingleTagInsideElement(node, "P") &&
-            this._getLinkDensity(node) < 0.25
-          ) {
-            var newNode = node.children[0];
-            node.parentNode.replaceChild(newNode, node);
-            node = newNode;
-            elementsToScore.push(node);
-          } else if (!this._hasChildBlockElement(node)) {
-            node = this._setNodeTag(node, "P");
-            elementsToScore.push(node);
-          }
-        }
+        //   // Sites like http://mobile.slate.com encloses each paragraph with a DIV
+        //   // element. DIVs with only a P element inside and no text content can be
+        //   // safely converted into plain P elements to avoid confusing the scoring
+        //   // algorithm with DIVs with are, in practice, paragraphs.
+        //   if (
+        //     this._hasSingleTagInsideElement(node, "P") &&
+        //     this._getLinkDensity(node) < 0.25
+        //   ) {
+        //     var newNode = node.children[0];
+        //     node.parentNode.replaceChild(newNode, node);
+        //     node = newNode;
+        //     elementsToScore.push(node);
+        //   } else if (!this._hasChildBlockElement(node)) {
+        //     node = this._setNodeTag(node, "P");
+        //     elementsToScore.push(node);
+        //   }
+        // }
         node = this._getNextNode(node);
       }
 
@@ -2385,6 +2408,45 @@ Readability.prototype = {
     return childrenLength / textLength;
   },
 
+  _cleanComments(e) {
+    function findComments(ele, commentNodes) {
+      ele.childNodes.forEach(child => {
+        if (child.nodeType === Node.COMMENT_NODE) {
+          commentNodes.push(child);
+        } else {
+          findComments(child, commentNodes);
+        }
+      });
+    }
+
+    var commentNodes = [];
+    findComments(e, commentNodes);
+    this.log("Removing comments:", commentNodes);
+    commentNodes.forEach(comment => {
+      comment.remove();
+    });
+  },
+
+  _cleanContainerContents(e) {
+    function findTextInContainerNodes(ele, textNodes) {
+      // ["DIV", "ARTICLE", "MAIN", "FIGURE", "BLOCKQUOTE", "UL", "LI", "OL", "PRE"].includes(e.nodeName)
+      ele.childNodes.forEach(child => {
+        if (ele.nodeName !== "P" && child.nodeName === "#text" && !(/^(?!\s*$).+/.test(child.textContent))) {
+          textNodes.push(child);
+        } else {
+          findTextInContainerNodes(child, textNodes);
+        }
+      });
+    }
+
+    var textNodes = [];
+    findTextInContainerNodes(e, textNodes);
+    this.log("Removing text nodes:", textNodes.map(node => node.cloneNode(true)));
+    textNodes.forEach(textNode => {
+      textNode.remove();
+    });
+  },
+
   _cleanAds(e) {
     this._removeNodes(this._getAllNodesWithTag(e, ["div"]), function (node) {
       var innerText = this._getInnerText(node);
@@ -2666,6 +2728,10 @@ Readability.prototype = {
 
   _isProbablyVisible(node) {
     // Have to null-check node.style and node.className.includes to deal with SVG and MathML nodes.
+    if (node.tagName === "svg" || node.parentNode.tagName === "svg" || node.parentNode.tagName === "math") {
+      return true;
+    }
+
     return (
       (!node.style || node.style.display != "none") &&
       (!node.style || node.style.visibility != "hidden") &&
