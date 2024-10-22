@@ -2431,7 +2431,7 @@ Readability.prototype = {
     function findTextInContainerNodes(ele, textNodes) {
       // ["DIV", "ARTICLE", "MAIN", "FIGURE", "BLOCKQUOTE", "UL", "LI", "OL", "PRE"].includes(e.nodeName)
       ele.childNodes.forEach(child => {
-        if (ele.nodeName !== "P" && child.nodeName === "#text" && !(/^(?!\s*$).+/.test(child.textContent))) {
+        if (["DIV", "ARTICLE", "MAIN"].includes(ele.nodeName) && child.nodeName === "#text" && !(/^(?!\s*$).+/.test(child.textContent))) {
           textNodes.push(child);
         } else {
           findTextInContainerNodes(child, textNodes);
